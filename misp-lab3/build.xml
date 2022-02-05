@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<project basedir="." default="build" name="Lab3">
+	<property file="build.properties"/>
+	
+
+
+	<property environment="env"/>
+
+	 <path id="classpath.source">
+        <fileset dir="${lib.dir}" includes="**/*.jar"/>
+    </path>
+
+	<taskdef resource="net/sf/antcontrib/antlib.xml">
+        <classpath>
+            <pathelement location="lib/ant-contrib-1.0b3.jar"/>
+        </classpath>
+    </taskdef>
+
+
+
+	<target name="print-version"> 
+   		<echo>Java/JVM version: ${ant.java.version}</echo> 
+   		<echo>Java/JVM detail version: ${java.version}</echo> 
+	</target>
+	
+	<target name="compile">
+		<mkdir dir="${target.dir}"/> 
+		<mkdir dir="${target.dir}"/>
+		<mkdir dir="${target.dir.classes}"/>
+		<mkdir dir="${target.dir.tests}"/>
+		<echo>Compiling classes</echo>
+		<javac destdir="${target.dir.classes}" verbose="true" includeantruntime="false" compiler="modern">
+			<classpath>
+                <path refid="classpath.source"/>
+            </classpath>
+			<src path="${main.src}"/>
+			<src path="${main.src.commands}"/>
+			<src path="${main.src.invoker}"/>
+			<src path="${main.src.point}"/>
+			<src path="${main.src.reader}"/>
+			<include name="*.java" />
+		</javac>
+		<echo>Compiling tests</echo>
+
+		<javac destdir="${target.dir.tests}" verbose="true" includeantruntime="false">
+			<classpath>
+                <path refid="classpath.source"/>
+				<pathelement location="${target.dir.classes}"/>
+            </classpath>
+			<src path="${test.src}"/>
+			<include name="*.java" />
+		</javac>
+	</target>
+
+	<!-- компиляция исходных кодов проекта и их упаковка в исполняемый jar-архив. 
+	Компиляцию исходных кодов реализовать посредством вызова цели compile.-->
+	<target name="build" depends="compile">
+		<delete file="${target.dir}/${target.jar.name}"/>
+
+		<echo>Moving files from sources to target</echo>
+		<copy todir="${target.dir}">
+			<fileset dir="${resources}"/>
+		</copy>
+
+		<echo>Moving files from sources/ascii to target</echo>
+		<copy todir="${target.dir}" overwrite="true" failonerror="false"> 
+			<fileset dir="${resources}/ascii"/>
+		</copy>
+
+
+		<jar destfile="${jar}" 
+
+		basedir="${target.dir.classes}" compress="false" index="true">
+            <manifest>
+                <attribute name="Main-Class" value="${mainclass}"/>
+            </manifest>
+			<fileset dir="${target.dir}" />
+        </jar>
+	</target>
+	
+	<target name="clean">
+		<echo>Delete all .class and temp files</echo>
+		<delete dir="${target.dir}"/>
+		<delete dir="${resources}/ascii"/>
+		<delete dir="${revisions}"/>
+	</target>
+
+	
+	
+	<!-- запуск junit-тестов проекта. Перед запуском тестов 
+	необходимо осуществить сборку проекта (цель build).-->
+	<target name="test" depends="build">
+		<echo message="--- TESTING DONE ---"/>
+        <junit printsummary="on">
+            <classpath>
+                <path refid="classpath.source"/>
+                <pathelement location="${target.dir.classes}"/>
+                <pathelement location="${target.dir.tests}"/>
+            </classpath>
+			<batchtest todir="${target.dir}">
+				<fileset dir="${test.src}">
+						<include name="**/*Test*" />
+				</fileset>
+			</batchtest>
+			<formatter type="xml"/>
+        </junit>
+	</target>
+	
+
+	<!--  добавление в MANIFEST.MF MD5 и SHA-1 файлов проекта, 
+	а также генерация и добавление в архив javadoc по всем классам проекта. -->
+	<target name="doc" depends="compile">
+		<delete dir="${doc.dir}"/>
+		<mkdir dir="${doc.dir}"/>
+
+		<!-- я тут не особо понял задание, поэтому я для главного класса добавляю хэшсуммы-->
+		<checksum property="hash.MD5" algorithm="MD5" file="${main.mainclass}"/>
+        
+        <checksum property="hash.SHA1" algorithm="SHA-1" file="${main.mainclass}"/>
+        <manifest file="${manifest}" mode="update">
+            <attribute name="Main-Class" value="${mainClass}"/>
+			<attribute name="MD5" value="${hash.MD5}"/>
+			<attribute name="SHA-1" value="${hash.SHA1}"/>
+        </manifest>
+
+		<javadoc destdir="${doc.dir}">
+			<fileset dir="${main.src}/"/>
+			<fileset dir="${main.src.commands}/"/>
+			<fileset dir="${main.src.invoker}/"/>
+			<fileset dir="${main.src.point}/"/>
+			<fileset dir="${main.src.reader}/"/>
+		</javadoc>
+		<zip destfile="${target.dir}/javadoc.zip" basedir="${doc.dir}"/>
+	</target>
+
+
+	<!-- преобразование native2ascii для копий файлов локализации (для тестирования сценария все 
+	строковые параметры необходимо вынести из классов в файлы локализации). -->
+	<target name="native2ascii">
+		<native2ascii src="${resources}" dest="${resources}/ascii" ext=".properties"/>
+	</target>
+
+	<!-- xml - валидация всех xml-файлов в проекте. -->
+	<target name="xml">
+		<xmlvalidate warn="false" lenient="no" >
+      		<fileset dir="${xml}" includes="*.xml"/>
+        	<attribute name="http://xml.org/sax/features/validation"
+                   value="false"/>
+        	<attribute name="http://apache.org/xml/features/validation/schema"
+                   value="false"/>
+    	</xmlvalidate>
+	</target>
+	
+	<!-- music - воспроизведение музыки по завершению сборки (цель build). -->
+	<target name="music" depends="build">
+    <echo>Playing music</echo>
+    <sound>
+        <success source="${music.success}"/>
+    </sound>
+</target>
+	
+	<!-- перемещение собранного проекта по scp на выбранный сервер по завершению сборки. 
+	Предварительно необходимо выполнить сборку проекта (цель build) -->
+	<target name="scp" depends="build">
+		<scp file="${target.jar}" todir="${env.SCP_USER}@${scp.host}:/home/${env.SCP_USER}/"
+            port="${scp.port}" password="${env.SCP_PASSWORD}"/>
+	</target>
+	
+	<target name="report">
+		<mkdir dir="${report.dir}"/>
+        <antcall target="test"/>
+        <junitreport todir="${report.dir}">
+            <fileset dir="${target.dir}">
+                <include name="TEST-*.xml" />
+            </fileset>
+            <report format="noframes" todir="${report.dir}/html/" />
+        </junitreport>
+	</target>
+	
+	<!--  осуществляет сборку и запуск программы в альтернативных окружениях; окружение задается версией java и 
+	набором аргументов виртуальной машины в файле параметров. -->
+	<target name="env" depends="build">
+        <echo message="==== Executing: java ${params} -jar ${target.jar} ===="/>
+		<java jar="${target.jar}" fork="true">
+        	<arg line="${params}"/>
+    	</java>
+    </target> 
+
+
+    <scriptdef name="propertyreset" language="javascript">
+        <attribute name="name"/>
+        <attribute name="value"/>
+        project.setProperty(attributes.get("name"), attributes.get("value"));
+    </scriptdef>
+	
+	<!--  создаёт альтернативную версию программы с измененными именами переменных и классов 
+	(используя задание replace/replaceregexp в файлах параметров) и упаковывает её в jar-архив. 
+	Для создания jar-архива использует цель build. -->
+	<target name="alt" depends="build">
+
+        <copy todir="${src_new.dir}">
+            <fileset dir="${src.dir}"/>
+        </copy>
+
+        <property name="src_old_path.dir" value="${src.dir}"/>
+
+        <propertyreset name="src.dir" value="${src_new.dir}"/>
+	
+		<echo message="Renaming commands to comm in ${src.dir}/com/company/ and so..."/> 
+		<replace dir="${src.dir}/${company}" token="Command" value="Comm"/>
+        <replace dir="${src.dir}/${company}" token="command" value="comm"/>
+
+        <replace dir="${src.dir}/${cmds}" token="Command" value="Comm"/>
+        <replace dir="${src.dir}/${cmds}" token="command" value="comm"/>
+		
+		<replace dir="${src.dir}/${reader}" token="Command" value="Comm"/>
+        <replace dir="${src.dir}/${reader}" token="command" value="comm"/>
+
+        <replace dir="${src.dir}/${invoker}" token="Command" value="Comm"/>
+        <replace dir="${src.dir}/${invoker}" token="command" value="comm"/>
+		
+        <antcall target="build"/>
+		<echo>deleting new src dir</echo>
+        <delete dir="${src.dir}"/>
+
+        <propertyreset name="src.dir" value="${src_old_path.dir}"/>
+		<echo message="src.dir = ${src.dir}"/>
+    </target>
+
+
+	
+	<!-- осуществляет проверку состояния рабочей копии, и, если изменения касаются классов, указанных в файле параметров 
+	выполняет commit в репозиторий git. -->
+	<target name="diff">
+		
+		<exec executable="git" outputproperty="git_diff_result">
+            <arg value="status"/>
+        </exec>
+		<for param="name" list="${classes.changes.diff}" delimiter=" ">
+            <sequential>
+                <condition property="found-diff">
+                    <contains string="${git_diff_result}" substring="@{name}.java"/>
+                </condition>
+            </sequential>
+        </for>
+        <antcall target="commit"/>
+	</target>
+
+	<target name="commit" if="${found-diff}">
+		<echo>git add *</echo>
+        <exec executable="git">
+            <arg line="add"/>
+            <arg value="*"/>
+        </exec>
+		<echo> git commit -m "ant commit"</echo>
+        <exec executable="git">
+            <arg value="commit"/>
+            <arg value="-m 'ant commit'"/>
+        </exec>
+    </target>
+	
+	
+	<!-- осуществляет получение из git-репозитория 2 предыдущих ревизий, 
+	их сборку (по аналогии с основной) и упаковку получившихся jar-файлов в zip-архив. 
+	Сборку реализовать посредством вызова цели build. -->
+	
+	<target name="team" depends="build">
+		<mkdir dir="${revisions}"/>
+		<exec executable="git" outputproperty="hash">
+			<arg value="rev-parse"/>
+			<arg value="--short"/>
+			<arg value="HEAD"/>
+		</exec>
+ 
+		<exec executable="git">
+			<arg value="checkout"/>
+			<arg value="HEAD~1"/>
+		</exec>
+		 
+		<antcall target="build">
+			<param name="jar" value="./revisions/1.jar"/>
+		</antcall>
+
+		<exec executable="git">
+			 <arg value="checkout"/>
+			 <arg value="HEAD~1"/>
+		</exec>
+		
+		<antcall target="build">
+			<param name="jar" value="./revisions/2.jar"/>
+		</antcall>
+		<zip destfile="${revisions}/revisions.zip"
+            basedir="${revisions}"/>
+		
+		<exec executable="git">
+			 <arg value="checkout"/>
+			 <arg value="${hash}"/>
+		</exec>
+		
+		<antcall target="clean"/> 
+	</target>
+	
+</project>
+
